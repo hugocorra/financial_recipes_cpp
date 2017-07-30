@@ -13,23 +13,30 @@ namespace QuantLib {
         //@{
         OvernightRateCoupon(const Date& paymentDate,
                             Real nominal,
-                            const std::vector<InterestRate>& interestRates,
+                            const std::vector<Rate>& interestRates,
+                            Real rate_percentage,
                             Spread spread,
                             const Date& accrualStartDate,
                             const Date& accrualEndDate,
-                            const Date& refPeriodStart,
-                            const Date& refPeriodEnd,
-                            const Date& exCouponDate)
-        : Coupon(paymentDate, nominal, accrualStartDate, accrualEndDate,
-             refPeriodStart, refPeriodEnd, exCouponDate),
-          rates_(interestRates),
-          spread_(spread)
+                            const Date& refPeriodStart = Date(),
+                            const Date& refPeriodEnd = Date(),
+                            const Date& exCouponDate = Date()) :
+            Coupon(paymentDate, nominal, accrualStartDate, accrualEndDate,
+                   refPeriodStart, refPeriodEnd, exCouponDate),
+            rates_(interestRates),
+            rate_percentage_(rate_percentage),
+            spread_(spread)
         {
         }
 
         Rate rate() const
         {
-            return 0.0;
+            return 0.0; //o que retornar aqui??
+        }
+
+        Spread spread() const
+        {
+            return spread_;
         }
 
         DayCounter dayCounter() const
@@ -43,20 +50,34 @@ namespace QuantLib {
         }
 
         Real amount() const {
-            //auto brl_calendar = Brazil();
             auto future_value = nominal();
+            auto b_252 = Business252();            
+
+            auto spread = InterestRate(spread_, Business252(), Compounded, Annual).compoundFactor(1/252.);
+
+            for (const auto rate : rates_) {
+                auto i = InterestRate(rate * rate_percentage_, Business252(), Compounded, Annual);
+                future_value *= i * spread;
+            }
+        
+
+
+
+            //auto brl_calendar = Brazil();
+            //auto future_value = nominal();
     
             //for //(auto d = accrualStartDate_; d <= accrualEndDate; d = brl_calendar.advance(d, 1, Days, Following))
-            for (const auto rate : rates_)
-            {
-                future_value *= ((rate.compoundFactor(1/252.) - 1) * spread_) + 1;
-            }
+           // for (const auto rate : rates_)
+           // {
+           //     future_value *= ((rate.compoundFactor(1/252.) - 1) * spread_) + 1;
+           // }
 
             return future_value;
         }
 
       private:
-        std::vector<InterestRate> rates_;
+        std::vector<Rate> rates_;
+        Real rate_percentage_;
         Spread spread_;
     };
 };
@@ -101,7 +122,7 @@ int main() {
     std::vector<InterestRate> vec_irates;
     std::transform(rates.begin(), rates.end(), std::back_inserter(vec_irates), InterestRateCDI);
     
-    OvernightRateCoupon cdi(today, loan_amount, vec_irates, cdi_percentage, today, today, today, today, today);
+    OvernightRateCoupon cdi(today, loan_amount, rates, cdi_percentage, 1.0, today, today, today, today, today);
     std::cout << "my class cdi.amount() is " << std::setprecision(9) << cdi.amount() << std::endl;
     
     std::cout << "future_value = " << std::setprecision(9) << future_value << std::endl;  
