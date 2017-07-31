@@ -6,14 +6,14 @@ using namespace QuantLib;
 
 namespace QuantLib {
 
-    //! %Coupon paying a fixed interest rate
+    //! %Coupon paying a overnight floating interest rate
     class OvernightRateCoupon : public Coupon {
       public:
         //! \name constructors
         //@{
         OvernightRateCoupon(const Date& paymentDate,
                             Real nominal,
-                            const std::vector<Rate>& interestRates,
+                            const std::vector<Rate>& rates,
                             Real rate_percentage,
                             Spread spread,
                             const Date& accrualStartDate,
@@ -23,15 +23,16 @@ namespace QuantLib {
                             const Date& exCouponDate = Date()) :
             Coupon(paymentDate, nominal, accrualStartDate, accrualEndDate,
                    refPeriodStart, refPeriodEnd, exCouponDate),
-            rates_(interestRates),
+            rates_(rates),
             rate_percentage_(rate_percentage),
             spread_(spread)
         {
         }
 
+        //! average rate
         Rate rate() const
         {
-            return 0.0; //o que retornar aqui??
+            return accumulate(rates.begin(), rates.end(), 0.0) / float(rates.size())
         }
 
         Spread spread() const
@@ -50,29 +51,17 @@ namespace QuantLib {
         }
 
         Real amount() const {
-            auto future_value = nominal();
             auto b_252 = Business252();            
 
-            auto spread = InterestRate(spread_, Business252(), Compounded, Annual).compoundFactor(1/252.);
+            auto spread = InterestRate(spread_, b_252, Compounded, Annual).compoundFactor(1/252.);
+            auto period_rate = 1.0;
 
             for (const auto rate : rates_) {
-                auto i = InterestRate(rate * rate_percentage_, Business252(), Compounded, Annual);
-                future_value *= i * spread;
+                auto accrued_rate = InterestRate(rate, b_252, Compounded, Annual).compoundFactor(1/252.) - 1;
+                period_rate *= ((accrued_rate * rate_percentage_) + 1) * (1 + spread_);
             }
         
-
-
-
-            //auto brl_calendar = Brazil();
-            //auto future_value = nominal();
-    
-            //for //(auto d = accrualStartDate_; d <= accrualEndDate; d = brl_calendar.advance(d, 1, Days, Following))
-           // for (const auto rate : rates_)
-           // {
-           //     future_value *= ((rate.compoundFactor(1/252.) - 1) * spread_) + 1;
-           // }
-
-            return future_value;
+            return nominal() * period_rate;
         }
 
       private:
@@ -122,7 +111,7 @@ int main() {
     std::vector<InterestRate> vec_irates;
     std::transform(rates.begin(), rates.end(), std::back_inserter(vec_irates), InterestRateCDI);
     
-    OvernightRateCoupon cdi(today, loan_amount, rates, cdi_percentage, 1.0, today, today, today, today, today);
+    OvernightRateCoupon cdi(today, loan_amount, rates, cdi_percentage, 0.0, today, today, today, today, today);
     std::cout << "my class cdi.amount() is " << std::setprecision(9) << cdi.amount() << std::endl;
     
     std::cout << "future_value = " << std::setprecision(9) << future_value << std::endl;  
